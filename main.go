@@ -7,8 +7,10 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"github.com/urfave/cli/v2"
 	"io"
 	"iter"
+	"log"
 	"os"
 	"path"
 	"strings"
@@ -16,6 +18,111 @@ import (
 )
 
 func main() {
+	app := &cli.App{
+		Name:  "gph-tidy",
+		Usage: "tidy google photos takeout files",
+		Commands: []*cli.Command{
+			{
+				Name:   "index",
+				Usage:  "build an index of all the contents of the archives",
+				Action: IndexCmd,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "output-file",
+						Aliases: []string{"o"},
+						Usage:   "Specify where to write the index",
+					},
+				},
+			},
+		},
+	}
+
+	if err := app.Run(os.Args); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func IndexCmd(c *cli.Context) error {
+	out := os.Stdout
+	if outFile := c.String("output-file"); outFile != "" {
+		f, err := os.Create(outFile)
+		if err != nil {
+			return fmt.Errorf("could not create output file: %s, %w", outFile, err)
+		}
+		defer f.Close()
+		out = f
+	}
+
+	var inputFiles []string
+
+	input := c.Args()
+	if input.Len() == 1 {
+		singleInput := input.First()
+		stat, err := os.Stat(singleInput)
+		if err != nil {
+			return fmt.Errorf("could not check input file: %s, %w", singleInput, err)
+		}
+
+		if stat.IsDir() {
+			return fmt.Errorf("specifing a dir is not supported yet")
+		}
+
+		inputFiles = append(inputFiles, singleInput)
+	} else {
+		inputFiles = c.Args().Slice()
+	}
+
+	return index(inputFiles, out)
+}
+
+func index(input []string, out io.Writer) error {
+	for _, f := range input {
+		a, err := NewPhotoArchive(f)
+		if err != nil {
+			return fmt.Errorf("could open archive: %s,  %w", f, err)
+		}
+
+		for e := range a.Entries() {
+			_, _ = fmt.Fprintln(out, e.String())
+		}
+	}
+
+	return nil
+}
+
+//
+//func indexParallel(input []string, out io.Writer) error {
+//	entriesChan := make(chan Entry)
+//	////entriesChan := make(chan Entry, len(inputFiles))
+//	defer close(entriesChan)
+//	go func() {
+//		for e := range entriesChan {
+//			_, _ = fmt.Fprintln(out, e.String())
+//		}
+//	}()
+//
+//	wg := sync.WaitGroup{}
+//	for _, file := range input {
+//		wg.Add(1)
+//		go func() {
+//			defer wg.Done()
+//			//fmt.Fprintf(os.Stderr, "Indexing: %s\n", file)
+//			a, err := NewPhotoArchive(file)
+//			if err != nil {
+//				// TODO fix this
+//				panic(fmt.Errorf("could open archive: %s,  %w", file, err))
+//			}
+//			for e := range a.Entries() {
+//				entriesChan <- e
+//			}
+//		}()
+//	}
+//
+//	wg.Wait()
+//	return nil
+//}
+
+func mainz() {
 
 	file := "/Volumes/Crucial X9/photos_31_08_2024/takeout-20240830T153532Z-001.tgz"
 	a, err := NewPhotoArchive(file)
@@ -144,9 +251,10 @@ func (a *PhotoArchive) Entries() iter.Seq[Entry] {
 			}
 			data := buf.Bytes()
 			hash := sha256.New()
-			sum := base64.StdEncoding.EncodeToString(hash.Sum(data))
+			hash.Write(data)
+			b64Sum := base64.StdEncoding.EncodeToString(hash.Sum(nil))
 
-			e := Entry{Archive: a.Path, Path: header.Name, Sha256: sum, Bytes: data}
+			e := Entry{Archive: a.Path, Path: header.Name, Sha256: b64Sum, Bytes: data}
 			if !yield(e) {
 				return
 			}
