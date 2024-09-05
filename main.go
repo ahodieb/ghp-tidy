@@ -14,7 +14,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	"time"
 )
 
 func main() {
@@ -89,104 +88,6 @@ func index(input []string, out io.Writer) error {
 
 	return nil
 }
-
-//
-//func indexParallel(input []string, out io.Writer) error {
-//	entriesChan := make(chan Entry)
-//	////entriesChan := make(chan Entry, len(inputFiles))
-//	defer close(entriesChan)
-//	go func() {
-//		for e := range entriesChan {
-//			_, _ = fmt.Fprintln(out, e.String())
-//		}
-//	}()
-//
-//	wg := sync.WaitGroup{}
-//	for _, file := range input {
-//		wg.Add(1)
-//		go func() {
-//			defer wg.Done()
-//			//fmt.Fprintf(os.Stderr, "Indexing: %s\n", file)
-//			a, err := NewPhotoArchive(file)
-//			if err != nil {
-//				// TODO fix this
-//				panic(fmt.Errorf("could open archive: %s,  %w", file, err))
-//			}
-//			for e := range a.Entries() {
-//				entriesChan <- e
-//			}
-//		}()
-//	}
-//
-//	wg.Wait()
-//	return nil
-//}
-
-func mainz() {
-
-	file := "/Volumes/Crucial X9/photos_31_08_2024/takeout-20240830T153532Z-001.tgz"
-	a, err := NewPhotoArchive(file)
-	if err != nil {
-		panic(err)
-	}
-
-	dumpDir := fmt.Sprintf("dump-%s", time.Now().Format("20060102150405"))
-	if err := os.Mkdir(dumpDir, 0755); err != nil {
-		panic(err)
-	}
-	indx, err := os.Create(path.Join(dumpDir, "index.txt"))
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println("Writing to: ", indx.Name())
-
-	for e := range a.Entries() {
-		//for e := range a.EntriesWithExt(".HEIC", ".jpg", ".mp4", ".json", ".jpeg", ".mov", ".png", ".mp") {
-		_, _ = fmt.Fprintln(indx, e.String())
-		if err := os.WriteFile(path.Join(dumpDir, e.Base()), e.Bytes, 0755); err != nil {
-			panic(err)
-		}
-	}
-
-	fmt.Println("Skipped:", len(a.skipped))
-	for _, s := range a.skipped {
-		fmt.Println(s)
-	}
-
-	fmt.Println("Failed:", len(a.failed))
-	for _, s := range a.failed {
-		fmt.Println(s)
-	}
-}
-
-//dir := "/Volumes/Crucial X9/photos_31_08_2024"
-//func lsDir(dir string) {
-//	files, err := os.ReadDir(dir)
-//	if err != nil {
-//		panic(err)
-//	}
-//
-//	for _, file := range files {
-//		info, err := file.Info()
-//		if err != nil {
-//			panic(fmt.Errorf("failed to get info for %q, %w", file.Name(), err))
-//		}
-//
-//		fmt.Println(file.Name(), info.Size())
-//	}
-//}
-
-//
-//func  ListFiles(path string) iter.Seq[string] {
-//	return func(yield func(string) bool) {
-//		for v := range s.m {
-//			if !yield(v) {
-//				return
-//			}
-//		}
-//	}
-//}
 
 type Entry struct {
 	Archive string
@@ -286,16 +187,4 @@ func (a *PhotoArchive) EntriesWithExt(x ...string) iter.Seq[Entry] {
 		_, match := ext[strings.ToLower(path.Ext(entry.Path))]
 		return match
 	})
-}
-
-func Filter[V any](f func(V) bool, s iter.Seq[V]) iter.Seq[V] {
-	return func(yield func(V) bool) {
-		for v := range s {
-			if f(v) {
-				if !yield(v) {
-					return
-				}
-			}
-		}
-	}
 }
