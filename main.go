@@ -101,7 +101,7 @@ func (e *Entry) Base() string {
 }
 
 func (e *Entry) String() string {
-	return fmt.Sprintf("%s\t%s\t%s\t%s", e.Sha256, e.Base(), e.Path, e.Archive)
+	return fmt.Sprintf(`{"sha256":%q,"name":%q,"size":%d,"path":"%s/%s"}`, e.Sha256, e.Base(), len(e.Bytes), e.Archive, e.Path)
 }
 
 type FailedEntry struct {
